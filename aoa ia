@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Floyd-Warshall Visualizer</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #f4f4f4; }
+    input, button { padding: 8px; margin: 5px; }
+    table { margin: 20px auto; border-collapse: collapse; }
+    td, th { padding: 10px; border: 1px solid #333; }
+    .highlight { background: yellow; transition: background 0.3s; }
+    .controls { margin: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Floyd-Warshall Algorithm Visualizer</h1>
+  <div class="controls">
+    <input type="number" id="vertices" placeholder="No. of vertices">
+    <input type="number" id="edges" placeholder="No. of edges">
+    <button onclick="getEdgeInputs()">Next</button>
+  </div>
+  <div id="edgeInputs" style="margin-bottom: 20px;"></div>
+  <div>
+    <button id="runBtn" style="display:none;" onclick="runFloydWarshall()">Run Simulation</button>
+    <button id="pauseBtn" style="display:none;" onclick="togglePause()">Pause</button>
+    <button id="resetBtn" style="display:none;" onclick="location.reload()">Reset</button>
+  </div>
+  <div id="simulationStatus"></div>
+  <div id="matrixContainer"></div>
+
+  <script>
+    let adjMatrix = [], V = 0;
+    let paused = false;
+
+    function getEdgeInputs() {
+      const e = document.getElementById("edgeInputs");
+      e.innerHTML = "";
+      V = +document.getElementById("vertices").value;
+      let E = +document.getElementById("edges").value;
+      if (V <= 0 || E < 0) return alert("Enter valid numbers.");
+
+      adjMatrix = Array.from({ length: V }, (_, i) =>
+        Array.from({ length: V }, (_, j) => (i === j ? 0 : Infinity))
+      );
+
+      for (let i = 0; i < E; i++) {
+        let d = document.createElement("div");
+        d.innerHTML = `Edge ${i + 1}: 
+          <input id="from${i}" placeholder="From (1-${V})" type="number" min="1" max="${V}">
+          <input id="to${i}" placeholder="To (1-${V})" type="number" min="1" max="${V}">
+          <input id="weight${i}" placeholder="Weight" type="number">`;
+        e.appendChild(d);
+      }
+
+      document.getElementById("runBtn").style.display = "inline-block";
+    }
+
+    function runFloydWarshall() {
+      let E = +document.getElementById("edges").value;
+      for (let i = 0; i < E; i++) {
+        let u = +document.getElementById(`from${i}`).value - 1,
+            v = +document.getElementById(`to${i}`).value - 1,
+            w = +document.getElementById(`weight${i}`).value;
+        if (u >= 0 && u < V && v >= 0 && v < V) adjMatrix[u][v] = w;
+      }
+
+      document.getElementById("pauseBtn").style.display = "inline-block";
+      document.getElementById("resetBtn").style.display = "inline-block";
+      floydWarshallStepwise(adjMatrix);
+    }
+
+    async function floydWarshallStepwise(matrix) {
+      let dist = matrix.map(r => r.slice()),
+          next = Array.from({ length: V }, (_, i) =>
+            Array.from({ length: V }, (_, j) => (matrix[i][j] !== Infinity && i !== j ? j : null))
+          ),
+          c = document.getElementById("matrixContainer"),
+          s = document.getElementById("simulationStatus");
+
+      const getPath = (i, j) => {
+        if (next[i][j] === null) return [];
+        let path = [i];
+        while (i !== j) {
+          i = next[i][j];
+          if (i === null) return [];
+          path.push(i);
+        }
+        return path.map(x => x + 1); // Convert to 1-based for display
+      };
+
+      const renderMatrix = (highlight = []) => {
+        let html = `<table><tr><th></th>${[...Array(V)].map((_, i) => `<th>${i + 1}</th>`).join("")}</tr>`;
+        for (let i = 0; i < V; i++) {
+          html += `<tr><th>${i + 1}</th>${[...Array(V)].map((_, j) => {
+            let val = dist[i][j] === Infinity ? "∞" : dist[i][j];
+            let cls = (highlight[0] === i && highlight[1] === j) ? "highlight" : "";
+            return `<td class="${cls}">${val}</td>`;
+          }).join("")}</tr>`;
+        }
+        c.innerHTML = html + "</table>";
+      };
+
+      const renderPathsTable = () => {
+        const div = document.createElement("div");
+        div.innerHTML = "<h3>All Shortest Paths</h3>";
+        let html = `<table><tr><th>From</th><th>To</th><th>Path</th></tr>`;
+        for (let i = 0; i < V; i++) {
+          for (let j = 0; j < V; j++) {
+            if (i !== j) {
+              let path = getPath(i, j);
+              html += `<tr><td>${i + 1}</td><td>${j + 1}</td><td>${path.length ? path.join(" → ") + ` (cost: ${dist[i][j]})` : "No Path"}</td></tr>`;
+            }
+          }
+        }
+        div.innerHTML += html + "</table>";
+        document.body.appendChild(div);
+      };
+
+      for (let k = 0; k < V; k++) {
+        for (let i = 0; i < V; i++) {
+          for (let j = 0; j < V; j++) {
+            await waitIfPaused();
+            if (dist[i][k] + dist[k][j] < dist[i][j]) {
+              dist[i][j] = dist[i][k] + dist[k][j];
+              next[i][j] = next[i][k];
+            }
+            s.innerText = `Processing: i=${i + 1}, j=${j + 1}, k=${k + 1} | Path: ${getPath(i, j).join(" → ") || "No Path"}`;
+            renderMatrix([i, j]);
+            await new Promise(res => setTimeout(res, 400));
+          }
+        }
+      }
+
+      s.innerText = "Final Result:";
+      renderMatrix();
+      renderPathsTable();
+    }
+
+    async function waitIfPaused() {
+      while (paused) await new Promise(r => setTimeout(r, 200));
+    }
+
+    function togglePause() {
+      paused = !paused;
+      document.getElementById("pauseBtn").innerText = paused ? "Resume" : "Pause";
+    }
+  </script>
+</body>
+</html>
